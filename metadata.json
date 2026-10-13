@@ -1,0 +1,8 @@
+{
+  "name": "ColorWin - Prediction Game",
+  "description": "Real-time colour prediction betting game with live draw cycles, multipliers, and trend charts.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
