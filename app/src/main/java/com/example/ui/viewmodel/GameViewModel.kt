@@ -68,6 +68,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
     val recentRounds: StateFlow<List<DrawRound>>
     val allTransactions: StateFlow<List<TransactionRecord>>
     val pendingWithdrawals: StateFlow<List<TransactionRecord>>
+    val gameSettings: StateFlow<GameSettings>
 
     val activeRoundUserBets: StateFlow<List<UserBet>>
 
@@ -106,6 +107,12 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
             viewModelScope,
             SharingStarted.WhileSubscribed(5000),
             emptyList()
+        )
+
+        gameSettings = repository.getGameSettingsFlow().map { it ?: GameSettings() }.stateIn(
+            viewModelScope,
+            SharingStarted.WhileSubscribed(5000),
+            GameSettings()
         )
 
         recentRounds = _selectedMode.flatMapLatest { mode ->
@@ -425,6 +432,21 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             repository.adminToggleKyc(status)
             _messageSnackbar.emit("Admin: KYC verification status changed to $status")
+        }
+    }
+
+    fun updateGameSettings(settings: GameSettings) {
+        viewModelScope.launch {
+            repository.updateGameSettings(settings)
+            vibrateSuccess()
+            _messageSnackbar.emit("Admin: Game settings & payout configuration saved!")
+        }
+    }
+
+    fun adminToggleFreeze(status: Boolean) {
+        viewModelScope.launch {
+            repository.adminToggleFreeze(status)
+            _messageSnackbar.emit("Admin: Account status is now ${if (status) "FROZEN" else "ACTIVE"}")
         }
     }
 

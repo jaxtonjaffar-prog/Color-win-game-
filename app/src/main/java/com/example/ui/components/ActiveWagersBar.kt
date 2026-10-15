@@ -29,11 +29,12 @@ fun ActiveWagersBar(
     modifier: Modifier = Modifier
 ) {
     Card(
-        colors = CardDefaults.cardColors(containerColor = SurfaceDark),
+        colors = CardDefaults.cardColors(containerColor = SurfaceCard),
         shape = RoundedCornerShape(16.dp),
+        border = androidx.compose.foundation.BorderStroke(1.dp, DividerColor),
         modifier = modifier.fillMaxWidth()
     ) {
-        Column(modifier = Modifier.padding(14.dp)) {
+        Column(modifier = Modifier.padding(12.dp)) {
             // Quick Bet Helper Buttons
             Row(
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -50,7 +51,7 @@ fun ActiveWagersBar(
                     ),
                     modifier = Modifier
                         .weight(1f)
-                        .height(42.dp)
+                        .height(40.dp)
                         .border(1.dp, ColorGold.copy(alpha = 0.5f), RoundedCornerShape(10.dp))
                         .testTag("random_bet_button")
                 ) {
@@ -61,8 +62,9 @@ fun ActiveWagersBar(
                     )
                     Spacer(modifier = Modifier.width(6.dp))
                     Text(
-                        text = "Lucky Bet",
+                        text = "Lucky Random",
                         fontSize = 11.sp,
+                        fontFamily = PoppinsFontFamily,
                         fontWeight = FontWeight.Bold
                     )
                 }
@@ -78,7 +80,7 @@ fun ActiveWagersBar(
                     ),
                     modifier = Modifier
                         .weight(1f)
-                        .height(42.dp)
+                        .height(40.dp)
                         .border(1.dp, ColorBlue.copy(alpha = 0.5f), RoundedCornerShape(10.dp))
                         .testTag("repeat_bet_button")
                 ) {
@@ -89,8 +91,9 @@ fun ActiveWagersBar(
                     )
                     Spacer(modifier = Modifier.width(6.dp))
                     Text(
-                        text = "Repeat Last",
+                        text = "Repeat Bet",
                         fontSize = 11.sp,
+                        fontFamily = PoppinsFontFamily,
                         fontWeight = FontWeight.Bold
                     )
                 }
@@ -99,10 +102,12 @@ fun ActiveWagersBar(
             if (activeBets.isNotEmpty()) {
                 Spacer(modifier = Modifier.height(10.dp))
                 Text(
-                    text = "Active Wagers on Current Round (${activeBets.size})",
-                    fontSize = 11.sp,
-                    fontWeight = FontWeight.SemiBold,
-                    color = TextSecondary
+                    text = "ACTIVE WAGERS ON ROUND (${activeBets.size})",
+                    fontSize = 10.sp,
+                    fontFamily = PoppinsFontFamily,
+                    fontWeight = FontWeight.Bold,
+                    color = ColorGold,
+                    letterSpacing = 0.5.sp
                 )
                 Spacer(modifier = Modifier.height(6.dp))
 
@@ -126,12 +131,14 @@ fun ActiveWagersBar(
                                 Text(
                                     text = bet.target.displayLabel,
                                     fontSize = 10.sp,
+                                    fontFamily = PoppinsFontFamily,
                                     fontWeight = FontWeight.Bold,
                                     color = ColorGoldLight
                                 )
                                 Text(
                                     text = "₹${bet.totalAmount.toInt()}",
                                     fontSize = 10.sp,
+                                    fontFamily = PoppinsFontFamily,
                                     fontWeight = FontWeight.Black,
                                     color = ColorGreen
                                 )

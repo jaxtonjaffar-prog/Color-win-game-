@@ -11,6 +11,14 @@ class GameRepository(private val dao: GameDao) {
 
     fun getUserProfileFlow(): Flow<UserProfile?> = dao.getUserProfileFlow()
 
+    fun getGameSettingsFlow(): Flow<GameSettings?> = dao.getGameSettingsFlow()
+
+    suspend fun getGameSettingsSync(): GameSettings = dao.getGameSettingsSync() ?: GameSettings()
+
+    suspend fun updateGameSettings(settings: GameSettings) {
+        dao.updateGameSettings(settings)
+    }
+
     fun getRecentRoundsFlow(mode: GameMode): Flow<List<DrawRound>> =
         dao.getRecentRoundsFlow(mode.name)
 
@@ -182,6 +190,9 @@ class GameRepository(private val dao: GameDao) {
         if (profile?.isLoggedIn != true) {
             return Result.failure(Exception("Guest mode: Please Login to place real bets!"))
         }
+        if (profile.isFrozen) {
+            return Result.failure(Exception("Account is frozen by Admin. Contact customer support."))
+        }
 
         val totalCost = chipAmount * multiplier
         val wallet = dao.getWalletSync() ?: return Result.failure(Exception("Wallet not initialized"))
@@ -287,12 +298,32 @@ class GameRepository(private val dao: GameDao) {
         }
     }
 
+    suspend fun adminToggleFreeze(status: Boolean) {
+        val profile = dao.getUserProfileSync()
+        if (profile != null) {
+            dao.updateUserProfile(profile.copy(isFrozen = status))
+        }
+    }
+
     suspend fun resolveDraw(
         periodId: String,
         mode: GameMode,
         forcedNumber: Int? = null
     ): Pair<DrawRound, Double> {
-        val resultNumber = forcedNumber ?: forcedNextResult ?: Random.nextInt(0, 10)
+        val settings = dao.getGameSettingsSync() ?: GameSettings()
+        val bets = dao.getBetsForPeriod(periodId)
+
+        val resultNumber = when {
+            forcedNumber != null -> forcedNumber
+            forcedNextResult != null -> forcedNextResult!!
+            settings.rngControlMode == "MANUAL" && settings.manualOverrideNumber != null -> settings.manualOverrideNumber
+            settings.rngControlMode == "LEAST_PAYOUT" && bets.isNotEmpty() -> {
+                (0..9).minByOrNull { testNum ->
+                    bets.sumOf { bet -> GameUtils.calculatePayout(bet, testNum, settings) }
+                } ?: Random.nextInt(0, 10)
+            }
+            else -> Random.nextInt(0, 10)
+        }
         forcedNextResult = null // Clear override after round executes
 
         val round = DrawRound(
@@ -306,12 +337,11 @@ class GameRepository(private val dao: GameDao) {
         )
         dao.insertRound(round)
 
-        val bets = dao.getBetsForPeriod(periodId)
         var totalRoundWin = 0.0
         var totalRoundLoss = 0.0
 
         val resolvedBets = bets.map { bet ->
-            val winAmount = GameUtils.calculatePayout(bet, resultNumber)
+            val winAmount = GameUtils.calculatePayout(bet, resultNumber, settings)
             if (winAmount > 0.0) {
                 totalRoundWin += winAmount
                 bet.copy(status = BetStatus.WON, winAmount = winAmount)

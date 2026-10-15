@@ -88,7 +88,24 @@ data class UserProfile(
     val bankAccountNumber: String = "987654321001",
     val bankIfsc: String = "HDFC0001234",
     val bankHolderName: String = "VIP Player",
-    val upiId: String = "player@oksbi"
+    val upiId: String = "player@oksbi",
+    val isFrozen: Boolean = false
+)
+
+@Entity(tableName = "game_settings")
+data class GameSettings(
+    @PrimaryKey val id: Int = 1,
+    val platformFeePercent: Double = 2.0,
+    val greenMultiplier: Double = 2.0,
+    val redMultiplier: Double = 2.0,
+    val violetMultiplier: Double = 4.5,
+    val comboMultiplier: Double = 1.5,
+    val numberMultiplier: Double = 9.0,
+    val comboNumberMultiplier: Double = 9.5,
+    val sizeMultiplier: Double = 2.0,
+    val minWithdrawal: Double = 100.0,
+    val rngControlMode: String = "FAIR_RNG", // "FAIR_RNG", "LEAST_PAYOUT", "MANUAL"
+    val manualOverrideNumber: Int? = null
 )
 
 @Entity(tableName = "draw_rounds")
@@ -139,7 +156,7 @@ data class TransactionRecord(
     val category: String = "ALL", // DEPOSIT, WITHDRAWAL, BET, WIN, BONUS, REFERRAL
     val amount: Double,
     val description: String,
-    val status: String = "COMPLETED", // COMPLETED, PENDING, PROCESSING
+    val status: String = "COMPLETED", // COMPLETED, PENDING, PROCESSING, REJECTED
     val timestamp: Long = System.currentTimeMillis()
 )
 
@@ -195,9 +212,10 @@ object GameUtils {
      * If user bets Big and result is 5-9 -> 2.0x (1.96x).
      * If user bets Small and result is 0-4 -> 2.0x (1.96x).
      */
-    fun calculatePayout(bet: UserBet, drawNumber: Int): Double {
+    fun calculatePayout(bet: UserBet, drawNumber: Int, settings: GameSettings = GameSettings()): Double {
         val contract = bet.totalAmount
-        val netContract = contract * 0.98 // 2% service fee
+        val feeRate = (settings.platformFeePercent / 100.0).coerceIn(0.0, 0.5)
+        val netContract = contract * (1.0 - feeRate)
         val target = bet.target
 
         return when (target) {
@@ -205,35 +223,35 @@ object GameUtils {
                 when (target.color) {
                     ColorChoice.GREEN -> {
                         when (drawNumber) {
-                            1, 3, 7, 9 -> netContract * 2.0
-                            5 -> netContract * 1.5
+                            1, 3, 7, 9 -> netContract * settings.greenMultiplier
+                            5 -> netContract * settings.comboMultiplier
                             else -> 0.0
                         }
                     }
                     ColorChoice.RED -> {
                         when (drawNumber) {
-                            2, 4, 6, 8 -> netContract * 2.0
-                            0 -> netContract * 1.5
+                            2, 4, 6, 8 -> netContract * settings.redMultiplier
+                            0 -> netContract * settings.comboMultiplier
                             else -> 0.0
                         }
                     }
                     ColorChoice.VIOLET -> {
                         if (drawNumber == 0 || drawNumber == 5) {
-                            netContract * 4.5
+                            netContract * settings.violetMultiplier
                         } else {
                             0.0
                         }
                     }
                     ColorChoice.GREEN_VIOLET -> {
                         if (drawNumber == 5) {
-                            netContract * 1.5
+                            netContract * settings.comboMultiplier
                         } else {
                             0.0
                         }
                     }
                     ColorChoice.RED_VIOLET -> {
                         if (drawNumber == 0) {
-                            netContract * 1.5
+                            netContract * settings.comboMultiplier
                         } else {
                             0.0
                         }
@@ -242,7 +260,7 @@ object GameUtils {
             }
             is BetTarget.NumberBet -> {
                 if (target.number == drawNumber) {
-                    val multiplier = if (drawNumber == 0 || drawNumber == 5) 9.5 else 9.0
+                    val multiplier = if (drawNumber == 0 || drawNumber == 5) settings.comboNumberMultiplier else settings.numberMultiplier
                     netContract * multiplier
                 } else {
                     0.0
@@ -253,7 +271,7 @@ object GameUtils {
                 val matches = (target.size == SizeChoice.BIG && isBigResult) ||
                         (target.size == SizeChoice.SMALL && !isBigResult)
                 if (matches) {
-                    netContract * 2.0
+                    netContract * settings.sizeMultiplier
                 } else {
                     0.0
                 }

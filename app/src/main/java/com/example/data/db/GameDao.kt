@@ -16,6 +16,16 @@ interface GameDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun updateUserProfile(profile: UserProfile)
 
+    // Game Settings
+    @Query("SELECT * FROM game_settings WHERE id = 1")
+    fun getGameSettingsFlow(): Flow<GameSettings?>
+
+    @Query("SELECT * FROM game_settings WHERE id = 1")
+    suspend fun getGameSettingsSync(): GameSettings?
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun updateGameSettings(settings: GameSettings)
+
     // Wallet
     @Query("SELECT * FROM wallet_account WHERE id = 1")
     fun getWalletFlow(): Flow<WalletAccount?>

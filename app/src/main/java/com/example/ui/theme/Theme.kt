@@ -29,10 +29,9 @@ fun MyApplicationTheme(
     darkTheme: Boolean = isSystemInDarkTheme(),
     content: @Composable () -> Unit
 ) {
-    // For casino/gaming apps, deep obsidian dark aesthetic provides optimal contrast and excitement
     MaterialTheme(
         colorScheme = DarkColorScheme,
-        typography = Typography,
+        typography = AppTypography,
         content = content
     )
 }

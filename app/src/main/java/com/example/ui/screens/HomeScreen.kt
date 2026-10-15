@@ -1,6 +1,7 @@
 package com.example.ui.screens
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -79,6 +80,7 @@ fun HomeScreen(
     Scaffold(
         snackbarHost = { SnackbarHost(snackbarHostState) },
         topBar = {
+            // Layout Top: Balance + Notification Ticker
             HeaderBar(
                 balance = wallet?.totalBalance ?: 0.0,
                 soundEnabled = soundEnabled,
@@ -94,6 +96,7 @@ fun HomeScreen(
                 tonalElevation = 8.dp,
                 modifier = Modifier
                     .windowInsetsPadding(WindowInsets.navigationBars)
+                    .border(0.5.dp, DividerColor, RoundedCornerShape(0.dp))
                     .testTag("main_navigation_bar")
             ) {
                 listOf(
@@ -117,7 +120,8 @@ fun HomeScreen(
                             Text(
                                 text = tab.title,
                                 fontSize = 11.sp,
-                                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
+                                fontFamily = PoppinsFontFamily,
+                                fontWeight = if (isSelected) FontWeight.Black else FontWeight.Normal,
                                 color = if (isSelected) ColorGold else TextSecondary
                             )
                         },
@@ -151,7 +155,7 @@ fun HomeScreen(
                             .fillMaxSize()
                             .widthIn(max = 640.dp)
                     ) {
-                        // 1. Period and Timer Card
+                        // 1. Center: Live Result Animation + Countdown Timer (with Pulsing effect, smooth numbers, Ball drop & Coin flip)
                         item {
                             PeriodTimerCard(
                                 selectedMode = selectedMode,
@@ -163,7 +167,7 @@ fun HomeScreen(
                             )
                         }
 
-                        // 2. Active Wagers + Quick Lucky / Repeat Bet Bar
+                        // 2. Middle (A): Active Wagers + Quick Lucky / Repeat Bet Bar
                         item {
                             ActiveWagersBar(
                                 activeBets = activeRoundBets,
@@ -173,7 +177,7 @@ fun HomeScreen(
                             )
                         }
 
-                        // 3. Bet Action Selection Grid (Green/Red/Violet, Combos, 0-9, Big/Small)
+                        // 3. Middle (B): Betting Buttons Grid (Glowing Green #00C853, Red #D50000, Violet #AA00FF, Combos, 0-9 Numbers, Big/Small)
                         item {
                             BetActionGrid(
                                 isLocked = isLocked,
@@ -181,7 +185,12 @@ fun HomeScreen(
                             )
                         }
 
-                        // 4. Game Sub-Tab Selector
+                        // 4. Bottom (A): Recent Results Strip (Horizontal scrolling strip of recent draw balls and trend counts)
+                        item {
+                            RecentResultsStrip(rounds = recentRounds)
+                        }
+
+                        // 5. Bottom (B): Game Sub-Tab Selector (Record Table, Chart, My Bets)
                         item {
                             Row(
                                 horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -195,6 +204,11 @@ fun HomeScreen(
                                             .weight(1f)
                                             .clip(RoundedCornerShape(10.dp))
                                             .background(if (isSelected) ColorGold else SurfaceDark)
+                                            .border(
+                                                1.dp,
+                                                if (isSelected) ColorGold else DividerColor,
+                                                RoundedCornerShape(10.dp)
+                                            )
                                             .clickable { currentGameSubTab = subTab }
                                             .padding(vertical = 10.dp)
                                             .testTag("subtab_${subTab.name}")
@@ -202,7 +216,8 @@ fun HomeScreen(
                                         Text(
                                             text = subTab.title,
                                             fontSize = 12.sp,
-                                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+                                            fontFamily = PoppinsFontFamily,
+                                            fontWeight = if (isSelected) FontWeight.Black else FontWeight.Medium,
                                             color = if (isSelected) Color.Black else TextSecondary
                                         )
                                     }
@@ -210,7 +225,7 @@ fun HomeScreen(
                             }
                         }
 
-                        // 5. Game Sub-Tab Content
+                        // 6. Game Sub-Tab Content
                         item {
                             when (currentGameSubTab) {
                                 GameSubTab.GAME_RECORD -> {
@@ -268,7 +283,7 @@ fun HomeScreen(
         )
     }
 
-    // Win / Draw Celebration Dialog
+    // Win / Draw Celebration Dialog with Confetti
     celebration?.let { cel ->
         DrawCelebrationDialog(
             celebration = cel,
