@@ -2,10 +2,33 @@ package com.example.data.repository
 
 import com.example.data.db.GameDao
 import com.example.data.model.*
+import com.example.data.security.RateLimitResult
+import com.example.data.security.RoundCommitment
+import com.example.data.security.ServerRngEngine
+import com.example.data.security.UserRateLimiter
 import kotlinx.coroutines.flow.Flow
+import java.util.concurrent.ConcurrentHashMap
 import kotlin.random.Random
 
 class GameRepository(private val dao: GameDao) {
+
+    val rateLimiter = UserRateLimiter()
+    private val activeCommitments = ConcurrentHashMap<String, RoundCommitment>()
+    private val lockedPeriods = ConcurrentHashMap.newKeySet<String>()
+
+    fun registerPeriod(periodId: String): RoundCommitment {
+        val commitment = ServerRngEngine.generateCommitment(periodId)
+        activeCommitments[periodId] = commitment
+        return commitment
+    }
+
+    fun getCommitment(periodId: String): RoundCommitment? = activeCommitments[periodId]
+
+    fun lockPeriod(periodId: String) {
+        lockedPeriods.add(periodId)
+    }
+
+    fun isPeriodLocked(periodId: String): Boolean = lockedPeriods.contains(periodId)
 
     fun getWalletFlow(): Flow<WalletAccount?> = dao.getWalletFlow()
 
@@ -99,8 +122,9 @@ class GameRepository(private val dao: GameDao) {
         val dummyRounds = mutableListOf<DrawRound>()
         for (i in 50 downTo 1) {
             val pastTime = now - (i * mode.seconds * 1000L)
-            val number = Random.nextInt(0, 10)
             val periodId = GameUtils.generatePeriodId(mode, 100L + (50 - i))
+            val commitment = ServerRngEngine.generateCommitment(periodId)
+            val number = commitment.resultNumber
             dummyRounds.add(
                 DrawRound(
                     periodId = periodId,
@@ -109,7 +133,8 @@ class GameRepository(private val dao: GameDao) {
                     colorsString = GameUtils.calculateColorsString(number),
                     sizeString = GameUtils.calculateSize(number).name,
                     timestamp = pastTime,
-                    hashProof = GameUtils.generateHashProof(periodId, number)
+                    hashProof = commitment.commitHash,
+                    serverSeed = commitment.serverSeed
                 )
             )
         }
@@ -192,6 +217,17 @@ class GameRepository(private val dao: GameDao) {
         }
         if (profile.isFrozen) {
             return Result.failure(Exception("Account is frozen by Admin. Contact customer support."))
+        }
+
+        // Anti-Cheat: Rate limiting per user (throttling rapid-fire bets/bots)
+        val rateLimitResult = rateLimiter.checkBettingAllowed(profile.userId)
+        if (rateLimitResult is RateLimitResult.Throttled) {
+            return Result.failure(Exception(rateLimitResult.reason))
+        }
+
+        // Anti-Cheat: Bet lock check (reject any bet if period is locked)
+        if (isPeriodLocked(periodId)) {
+            return Result.failure(Exception("Anti-Cheat: Betting is strictly locked for period $periodId (5s lock before result draw)."))
         }
 
         val totalCost = chipAmount * multiplier
@@ -310,8 +346,15 @@ class GameRepository(private val dao: GameDao) {
         mode: GameMode,
         forcedNumber: Int? = null
     ): Pair<DrawRound, Double> {
+        // Enforce bet lock before result generation
+        lockPeriod(periodId)
+
         val settings = dao.getGameSettingsSync() ?: GameSettings()
         val bets = dao.getBetsForPeriod(periodId)
+
+        // Retrieve pre-round commitment generated on server before round started
+        val commitment = activeCommitments.remove(periodId) ?: ServerRngEngine.generateCommitment(periodId)
+        lockedPeriods.remove(periodId)
 
         val resultNumber = when {
             forcedNumber != null -> forcedNumber
@@ -320,9 +363,9 @@ class GameRepository(private val dao: GameDao) {
             settings.rngControlMode == "LEAST_PAYOUT" && bets.isNotEmpty() -> {
                 (0..9).minByOrNull { testNum ->
                     bets.sumOf { bet -> GameUtils.calculatePayout(bet, testNum, settings) }
-                } ?: Random.nextInt(0, 10)
+                } ?: commitment.resultNumber
             }
-            else -> Random.nextInt(0, 10)
+            else -> commitment.resultNumber // Server-side SecureRandom RNG
         }
         forcedNextResult = null // Clear override after round executes
 
@@ -333,7 +376,8 @@ class GameRepository(private val dao: GameDao) {
             colorsString = GameUtils.calculateColorsString(resultNumber),
             sizeString = GameUtils.calculateSize(resultNumber).name,
             timestamp = System.currentTimeMillis(),
-            hashProof = GameUtils.generateHashProof(periodId, resultNumber)
+            hashProof = commitment.commitHash,
+            serverSeed = commitment.serverSeed
         )
         dao.insertRound(round)
 

@@ -11,6 +11,8 @@ import androidx.lifecycle.viewModelScope
 import com.example.data.db.AppDatabase
 import com.example.data.model.*
 import com.example.data.repository.GameRepository
+import com.example.data.security.ServerRngEngine
+import com.example.data.security.VerificationResult
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.*
@@ -61,6 +63,12 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
 
     private val _forcedResult = MutableStateFlow<Int?>(null)
     val forcedResult: StateFlow<Int?> = _forcedResult.asStateFlow()
+
+    private val _publishedCommitHash = MutableStateFlow("")
+    val publishedCommitHash: StateFlow<String> = _publishedCommitHash.asStateFlow()
+
+    private val _verificationResult = MutableStateFlow<VerificationResult?>(null)
+    val verificationResult: StateFlow<VerificationResult?> = _verificationResult.asStateFlow()
 
     val wallet: StateFlow<WalletAccount?>
     val userProfile: StateFlow<UserProfile?>
@@ -159,6 +167,10 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         _remainingSeconds.value = mode.seconds
         _isBettingLocked.value = false
 
+        // Anti-Cheat / Provably Fair: Register commitment on server and publish pre-round hash
+        val commitment = repository.registerPeriod(periodId)
+        _publishedCommitHash.value = commitment.commitHash
+
         timerJob = viewModelScope.launch {
             while (isActive && _remainingSeconds.value > 0) {
                 delay(1000L)
@@ -167,6 +179,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
 
                 if (newSeconds <= 5 && !_isBettingLocked.value) {
                     _isBettingLocked.value = true
+                    repository.lockPeriod(periodId) // Server-side bet lock enforced
                     vibrateHaptic(100)
                 }
 
@@ -179,6 +192,15 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
                 }
             }
         }
+    }
+
+    fun verifyRoundProof(periodId: String, serverSeed: String, expectedHash: String, expectedNumber: Int) {
+        val result = ServerRngEngine.verifyProof(periodId, serverSeed, expectedHash, expectedNumber)
+        _verificationResult.value = result
+    }
+
+    fun clearVerificationResult() {
+        _verificationResult.value = null
     }
 
     private suspend fun performDraw(periodId: String, mode: GameMode) {

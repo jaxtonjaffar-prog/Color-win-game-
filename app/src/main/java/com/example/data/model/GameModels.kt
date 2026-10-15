@@ -116,7 +116,8 @@ data class DrawRound(
     val colorsString: String, // "GREEN", "RED", "VIOLET_RED", "VIOLET_GREEN"
     val sizeString: String,   // "BIG", "SMALL"
     val timestamp: Long,
-    val hashProof: String
+    val hashProof: String,
+    val serverSeed: String = ""
 ) {
     val isBig: Boolean get() = resultNumber >= 5
     val hasViolet: Boolean get() = resultNumber == 0 || resultNumber == 5

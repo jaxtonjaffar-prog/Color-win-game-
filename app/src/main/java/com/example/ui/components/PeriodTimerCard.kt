@@ -14,6 +14,7 @@ import androidx.compose.material.icons.filled.Casino
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.RotateRight
+import androidx.compose.material.icons.filled.Security
 import androidx.compose.material.icons.filled.Timer
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -50,10 +51,12 @@ fun PeriodTimerCard(
     remainingSeconds: Int,
     isLocked: Boolean,
     recentRounds: List<DrawRound>,
+    publishedCommitHash: String = "",
     modifier: Modifier = Modifier
 ) {
     var animationMode by remember { mutableStateOf(LiveAnimationMode.BALL_DROP) }
     var isSimulatingAnimation by remember { mutableStateOf(false) }
+    var showFairnessDialog by remember { mutableStateOf(false) }
     val coroutineScope = rememberCoroutineScope()
 
     // Pulsing effect for countdown timer
@@ -300,6 +303,72 @@ fun PeriodTimerCard(
                         )
                     }
                 }
+
+                if (publishedCommitHash.isNotEmpty()) {
+                    Spacer(modifier = Modifier.height(10.dp))
+                    Surface(
+                        color = SurfaceCard.copy(alpha = 0.8f),
+                        shape = RoundedCornerShape(8.dp),
+                        border = androidx.compose.foundation.BorderStroke(
+                            0.5.dp,
+                            if (isLocked) ColorRed.copy(alpha = 0.5f) else ColorGold.copy(alpha = 0.35f)
+                        ),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { showFairnessDialog = true }
+                            .testTag("fairness_commitment_banner")
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 5.dp)
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Security,
+                                    contentDescription = null,
+                                    tint = if (isLocked) ColorRed else ColorGold,
+                                    modifier = Modifier.size(13.dp)
+                                )
+                                Text(
+                                    text = "Pre-Round Hash: ${publishedCommitHash.take(10)}...${publishedCommitHash.takeLast(6)}",
+                                    fontSize = 10.sp,
+                                    fontFamily = FontFamily.Monospace,
+                                    fontWeight = FontWeight.Medium,
+                                    color = TextSecondary,
+                                    maxLines = 1
+                                )
+                            }
+                            Surface(
+                                color = ColorGold.copy(alpha = 0.15f),
+                                shape = RoundedCornerShape(4.dp)
+                            ) {
+                                Text(
+                                    text = "PROVABLY FAIR ▾",
+                                    fontSize = 8.5.sp,
+                                    fontFamily = PoppinsFontFamily,
+                                    fontWeight = FontWeight.Black,
+                                    color = ColorGold,
+                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+
+            if (showFairnessDialog) {
+                ProvablyFairDialog(
+                    currentPeriodId = periodId,
+                    currentCommitHash = publishedCommitHash,
+                    isLocked = isLocked,
+                    recentRounds = recentRounds,
+                    onDismiss = { showFairnessDialog = false }
+                )
             }
 
             Spacer(modifier = Modifier.height(12.dp))

@@ -57,6 +57,7 @@ fun HomeScreen(
     val forcedNumber by viewModel.forcedResult.collectAsStateWithLifecycle()
     val pendingWithdrawals by viewModel.pendingWithdrawals.collectAsStateWithLifecycle()
     val soundEnabled by viewModel.soundEnabled.collectAsStateWithLifecycle()
+    val publishedCommitHash by viewModel.publishedCommitHash.collectAsStateWithLifecycle()
 
     var currentNavTab by remember { mutableStateOf(MainNavTab.WINGO) }
     var currentGameSubTab by remember { mutableStateOf(GameSubTab.GAME_RECORD) }
@@ -163,7 +164,8 @@ fun HomeScreen(
                                 periodId = periodId,
                                 remainingSeconds = remainingSeconds,
                                 isLocked = isLocked,
-                                recentRounds = recentRounds
+                                recentRounds = recentRounds,
+                                publishedCommitHash = publishedCommitHash
                             )
                         }
 

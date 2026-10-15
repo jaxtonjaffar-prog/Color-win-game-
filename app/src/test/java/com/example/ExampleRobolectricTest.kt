@@ -148,4 +148,55 @@ class ExampleRobolectricTest {
         assertEquals(hash1, hash2)
         assertEquals(64, hash1.length) // SHA-256 hex string length
     }
+
+    @Test
+    fun `test server side RNG generates valid commitment and number in 0 to 9`() {
+        val commitment = com.example.data.security.ServerRngEngine.generateCommitment("202610141M0042")
+        assertEquals(64, commitment.serverSeed.length)
+        assertEquals(64, commitment.commitHash.length)
+        assertTrue(commitment.resultNumber in 0..9)
+
+        // Deriving with same seed and period must be 100% deterministic
+        val derivedNumber = com.example.data.security.ServerRngEngine.deriveResultNumber(commitment.serverSeed, "202610141M0042")
+        assertEquals(commitment.resultNumber, derivedNumber)
+    }
+
+    @Test
+    fun `test provably fair verification succeeds for genuine seed and fails on tampered seed`() {
+        val periodId = "202610141M0099"
+        val commitment = com.example.data.security.ServerRngEngine.generateCommitment(periodId)
+
+        // Genuine proof check
+        val verified = com.example.data.security.ServerRngEngine.verifyProof(
+            periodId = periodId,
+            revealedServerSeed = commitment.serverSeed,
+            expectedCommitHash = commitment.commitHash,
+            expectedNumber = commitment.resultNumber
+        )
+        assertTrue(verified.isValid)
+
+        // Tampered seed check -> must fail
+        val fakeSeed = "a".repeat(64)
+        val tamperedCheck = com.example.data.security.ServerRngEngine.verifyProof(
+            periodId = periodId,
+            revealedServerSeed = fakeSeed,
+            expectedCommitHash = commitment.commitHash,
+            expectedNumber = commitment.resultNumber
+        )
+        org.junit.Assert.assertFalse(tamperedCheck.isValid)
+    }
+
+    @Test
+    fun `test anti-cheat rate limiter throttles rapid wagers`() {
+        val rateLimiter = com.example.data.security.UserRateLimiter(minIntervalMs = 200L, maxRequestsPerWindow = 3)
+        val userId = "USER_TEST_123"
+
+        // 1st request -> allowed
+        val r1 = rateLimiter.checkBettingAllowed(userId)
+        assertTrue(r1 is com.example.data.security.RateLimitResult.Allowed)
+
+        // Immediate 2nd request (<200ms) -> throttled
+        val r2 = rateLimiter.checkBettingAllowed(userId)
+        assertTrue(r2 is com.example.data.security.RateLimitResult.Throttled)
+    }
 }
