@@ -22,6 +22,7 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.data.model.DepositBonusSystem
 import com.example.data.model.TransactionRecord
 import com.example.data.model.UserProfile
 import com.example.data.model.WalletAccount
@@ -42,6 +43,10 @@ fun WalletScreen(
     transactions: List<TransactionRecord>,
     onDeposit: (method: String, amount: Double) -> Unit,
     onWithdraw: (amount: Double, method: String, destination: String) -> Unit,
+    onClaimCashback: () -> Unit = {},
+    onTransferCommission: (Double) -> Unit = {},
+    onSelectTransaction: (TransactionRecord) -> Unit = {},
+    onOpenResponsibleLimits: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     var selectedSection by remember { mutableStateOf(WalletSectionTab.DEPOSIT) }
@@ -110,6 +115,131 @@ fun WalletScreen(
                             modifier = Modifier.weight(1f)
                         )
                     }
+
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    // Monetization Perks: VIP Cashback & Referral Commission Quick Claim Row
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        // VIP Loss Cashback Box
+                        Surface(
+                            color = SurfaceElevated,
+                            shape = RoundedCornerShape(12.dp),
+                            border = androidx.compose.foundation.BorderStroke(1.dp, ColorGreen.copy(alpha = 0.35f)),
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Column(modifier = Modifier.padding(10.dp)) {
+                                Text(text = "VIP Loss Cashback", fontSize = 10.sp, color = TextSecondary, fontWeight = FontWeight.SemiBold)
+                                Spacer(modifier = Modifier.height(2.dp))
+                                Text(
+                                    text = "₹${"%,.2f".format(wallet?.unclaimedCashback ?: 0.0)}",
+                                    fontSize = 14.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = ColorGreen
+                                )
+                                Spacer(modifier = Modifier.height(6.dp))
+                                Button(
+                                    onClick = onClaimCashback,
+                                    enabled = (wallet?.unclaimedCashback ?: 0.0) >= 1.0,
+                                    colors = ButtonDefaults.buttonColors(containerColor = ColorGreen, contentColor = Color.Black),
+                                    shape = RoundedCornerShape(6.dp),
+                                    contentPadding = PaddingValues(horizontal = 6.dp, vertical = 2.dp),
+                                    modifier = Modifier.fillMaxWidth().height(28.dp).testTag("wallet_claim_cashback_btn")
+                                ) {
+                                    Text(text = "Claim Cashback", fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                                }
+                            }
+                        }
+
+                        // Referral Commission Box
+                        Surface(
+                            color = SurfaceElevated,
+                            shape = RoundedCornerShape(12.dp),
+                            border = androidx.compose.foundation.BorderStroke(1.dp, ColorViolet.copy(alpha = 0.35f)),
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Column(modifier = Modifier.padding(10.dp)) {
+                                Text(text = "Referral Commission", fontSize = 10.sp, color = TextSecondary, fontWeight = FontWeight.SemiBold)
+                                Spacer(modifier = Modifier.height(2.dp))
+                                Text(
+                                    text = "₹${"%,.2f".format(wallet?.referralCommissionBalance ?: 0.0)}",
+                                    fontSize = 14.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = ColorViolet
+                                )
+                                Spacer(modifier = Modifier.height(6.dp))
+                                Button(
+                                    onClick = { onTransferCommission(wallet?.referralCommissionBalance ?: 0.0) },
+                                    enabled = (wallet?.referralCommissionBalance ?: 0.0) >= 10.0,
+                                    colors = ButtonDefaults.buttonColors(containerColor = ColorViolet, contentColor = Color.White),
+                                    shape = RoundedCornerShape(6.dp),
+                                    contentPadding = PaddingValues(horizontal = 6.dp, vertical = 2.dp),
+                                    modifier = Modifier.fillMaxWidth().height(28.dp).testTag("wallet_transfer_comm_btn")
+                                ) {
+                                    Text(text = "Transfer to Main", fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // Compliance & Safety Indicator Bar (18+ • TLS 1.3 • Responsible Limits)
+        item {
+            Surface(
+                color = SurfaceElevated,
+                shape = RoundedCornerShape(12.dp),
+                border = androidx.compose.foundation.BorderStroke(1.dp, ColorGreen.copy(alpha = 0.35f)),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { onOpenResponsibleLimits() }
+                    .testTag("responsible_gaming_limits_banner")
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp)
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Box(
+                            contentAlignment = Alignment.Center,
+                            modifier = Modifier
+                                .size(28.dp)
+                                .clip(CircleShape)
+                                .background(ColorGreen.copy(alpha = 0.2f))
+                        ) {
+                            Icon(Icons.Default.HealthAndSafety, contentDescription = null, tint = ColorGreen, modifier = Modifier.size(16.dp))
+                        }
+                        Column {
+                            Text(
+                                text = "Responsible Gaming Limits • 18+",
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = TextPrimary
+                            )
+                            Text(
+                                text = "Deposit Cap: ₹${"%,.0f".format(profile?.dailyDepositLimit ?: 25000.0)} | Single Bet Cap: ₹${"%,.0f".format(profile?.singleBetLimit ?: 5000.0)}",
+                                fontSize = 10.sp,
+                                color = ColorGreen
+                            )
+                        }
+                    }
+                    OutlinedButton(
+                        onClick = onOpenResponsibleLimits,
+                        shape = RoundedCornerShape(6.dp),
+                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
+                        border = androidx.compose.foundation.BorderStroke(1.dp, ColorGreen),
+                        modifier = Modifier.height(28.dp)
+                    ) {
+                        Text(text = "Limits", fontSize = 10.sp, color = ColorGreen, fontWeight = FontWeight.Bold)
+                    }
                 }
             }
         }
@@ -151,7 +281,7 @@ fun WalletScreen(
         when (selectedSection) {
             WalletSectionTab.DEPOSIT -> {
                 item {
-                    DepositView(onDeposit = onDeposit)
+                    DepositView(profile = profile, onDeposit = onDeposit)
                 }
             }
             WalletSectionTab.WITHDRAW -> {
@@ -165,7 +295,10 @@ fun WalletScreen(
             }
             WalletSectionTab.TRANSACTIONS -> {
                 item {
-                    TransactionsView(transactions = transactions)
+                    TransactionsView(
+                        transactions = transactions,
+                        onSelectTransaction = onSelectTransaction
+                    )
                 }
             }
         }
@@ -199,11 +332,13 @@ fun BalanceSubCard(
 
 @Composable
 fun DepositView(
+    profile: UserProfile?,
     onDeposit: (method: String, amount: Double) -> Unit
 ) {
     var selectedMethod by remember { mutableStateOf("UPI") }
-    var selectedAmount by remember { mutableStateOf(500.0) }
+    var selectedAmount by remember { mutableStateOf(1000.0) }
     var customAmountText by remember { mutableStateOf("") }
+    val isFirstDeposit = profile?.isFirstDepositMade != true
 
     val methods = listOf(
         "UPI" to "UPI (GPay / PhonePe / Paytm)",
@@ -213,6 +348,7 @@ fun DepositView(
     )
 
     val quickAmounts = listOf(100.0, 500.0, 1000.0, 2000.0, 5000.0, 10000.0)
+    val calculatedBonus = DepositBonusSystem.calculateBonus(selectedAmount, isFirstDeposit)
 
     Card(
         colors = CardDefaults.cardColors(containerColor = SurfaceDark),
@@ -220,6 +356,52 @@ fun DepositView(
         modifier = Modifier.fillMaxWidth()
     ) {
         Column(modifier = Modifier.padding(16.dp)) {
+            // Deposit Promotion Banner
+            Surface(
+                color = SurfaceElevated,
+                shape = RoundedCornerShape(12.dp),
+                border = androidx.compose.foundation.BorderStroke(1.dp, ColorGold.copy(alpha = 0.5f)),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    modifier = Modifier.padding(12.dp)
+                ) {
+                    Box(
+                        contentAlignment = Alignment.Center,
+                        modifier = Modifier
+                            .size(36.dp)
+                            .clip(CircleShape)
+                            .background(ColorGold.copy(alpha = 0.2f))
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.CardGiftcard,
+                            contentDescription = null,
+                            tint = ColorGold,
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = if (isFirstDeposit) "100% FIRST DEPOSIT MATCH!" else "TIERED RELOAD BONUSES ACTIVE",
+                            fontSize = 11.sp,
+                            fontFamily = PoppinsFontFamily,
+                            fontWeight = FontWeight.Black,
+                            color = ColorGoldLight
+                        )
+                        Text(
+                            text = if (isFirstDeposit) "Get 100% matched bonus up to ₹5,000 on your first deposit!" else "Deposit ₹500-₹999 (+10%) | ₹1,000+ (+20%) | ₹3,000+ (+35%) | ₹10,000+ (+50%)",
+                            fontSize = 10.sp,
+                            color = TextSecondary,
+                            lineHeight = 13.sp
+                        )
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(14.dp))
+
             Text(
                 text = "1. Select Payment Method",
                 fontSize = 12.sp,
@@ -260,7 +442,7 @@ fun DepositView(
             Spacer(modifier = Modifier.height(16.dp))
 
             Text(
-                text = "2. Select Deposit Amount",
+                text = "2. Select Deposit Amount & Bonus",
                 fontSize = 12.sp,
                 fontWeight = FontWeight.Bold,
                 color = ColorGoldLight
@@ -272,8 +454,10 @@ fun DepositView(
                 modifier = Modifier.fillMaxWidth()
             ) {
                 quickAmounts.take(3).forEach { amt ->
-                    AmountPill(
+                    val bonusAmt = DepositBonusSystem.calculateBonus(amt, isFirstDeposit)
+                    AmountPillWithBonus(
                         amount = amt,
+                        bonus = bonusAmt,
                         isSelected = selectedAmount == amt && customAmountText.isEmpty(),
                         onClick = {
                             selectedAmount = amt
@@ -289,8 +473,10 @@ fun DepositView(
                 modifier = Modifier.fillMaxWidth()
             ) {
                 quickAmounts.drop(3).forEach { amt ->
-                    AmountPill(
+                    val bonusAmt = DepositBonusSystem.calculateBonus(amt, isFirstDeposit)
+                    AmountPillWithBonus(
                         amount = amt,
+                        bonus = bonusAmt,
                         isSelected = selectedAmount == amt && customAmountText.isEmpty(),
                         onClick = {
                             selectedAmount = amt
@@ -321,6 +507,53 @@ fun DepositView(
                 modifier = Modifier.fillMaxWidth()
             )
 
+            Spacer(modifier = Modifier.height(12.dp))
+
+            // Bonus Breakdown Box
+            Surface(
+                color = SurfaceElevated,
+                shape = RoundedCornerShape(10.dp),
+                border = androidx.compose.foundation.BorderStroke(1.dp, ColorGreen.copy(alpha = 0.5f)),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    modifier = Modifier.padding(12.dp)
+                ) {
+                    Column {
+                        Text(
+                            text = "Deposit: ₹${selectedAmount.toInt()} + Bonus: ₹${calculatedBonus.toInt()}",
+                            fontSize = 11.sp,
+                            color = TextSecondary
+                        )
+                        Spacer(modifier = Modifier.height(2.dp))
+                        Text(
+                            text = "Playable Balance: ₹${(selectedAmount + calculatedBonus).toInt()}",
+                            fontSize = 14.sp,
+                            fontFamily = PoppinsFontFamily,
+                            fontWeight = FontWeight.Black,
+                            color = ColorGreen
+                        )
+                    }
+
+                    if (calculatedBonus > 0) {
+                        Surface(
+                            color = ColorGreen,
+                            shape = RoundedCornerShape(6.dp)
+                        ) {
+                            Text(
+                                text = "+₹${calculatedBonus.toInt()} FREE",
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.Black,
+                                color = Color.Black,
+                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 3.dp)
+                            )
+                        }
+                    }
+                }
+            }
+
             Spacer(modifier = Modifier.height(16.dp))
 
             Button(
@@ -338,9 +571,46 @@ fun DepositView(
                 Icon(Icons.Default.AddCard, contentDescription = null, modifier = Modifier.size(18.dp))
                 Spacer(modifier = Modifier.width(6.dp))
                 Text(
-                    text = "Deposit ₹${selectedAmount.toInt()} Instantly",
+                    text = "Deposit ₹${selectedAmount.toInt()} (+₹${calculatedBonus.toInt()} Bonus)",
                     fontWeight = FontWeight.Bold,
                     fontSize = 13.sp
+                )
+            }
+        }
+    }
+}
+
+@Composable
+fun AmountPillWithBonus(
+    amount: Double,
+    bonus: Double,
+    isSelected: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Box(
+        contentAlignment = Alignment.Center,
+        modifier = modifier
+            .height(46.dp)
+            .clip(RoundedCornerShape(8.dp))
+            .background(if (isSelected) ColorGold else SurfaceElevated)
+            .border(1.dp, if (isSelected) ColorGoldLight else DividerColor, RoundedCornerShape(8.dp))
+            .clickable(onClick = onClick)
+            .padding(horizontal = 4.dp, vertical = 4.dp)
+    ) {
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            Text(
+                text = "₹${amount.toInt()}",
+                fontSize = 12.sp,
+                fontWeight = FontWeight.Bold,
+                color = if (isSelected) Color.Black else TextPrimary
+            )
+            if (bonus > 0) {
+                Text(
+                    text = "+₹${bonus.toInt()}",
+                    fontSize = 9.sp,
+                    fontWeight = FontWeight.Black,
+                    color = if (isSelected) Color.Black.copy(alpha = 0.75f) else ColorGreen
                 )
             }
         }
@@ -496,6 +766,51 @@ fun WithdrawView(
             Spacer(modifier = Modifier.height(16.dp))
 
             val enteredAmount = amountText.toDoubleOrNull() ?: 0.0
+            val isHighValueAml = enteredAmount > 10000.0
+            val isAmlCleared = profile?.isAmlVerified == true
+
+            if (isHighValueAml) {
+                Spacer(modifier = Modifier.height(10.dp))
+                Surface(
+                    color = if (isAmlCleared) ColorGreen.copy(alpha = 0.15f) else ColorGold.copy(alpha = 0.15f),
+                    shape = RoundedCornerShape(10.dp),
+                    border = androidx.compose.foundation.BorderStroke(1.dp, if (isAmlCleared) ColorGreen.copy(alpha = 0.5f) else ColorGold.copy(alpha = 0.5f)),
+                    modifier = Modifier.fillMaxWidth().testTag("aml_tier2_notice")
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        modifier = Modifier.padding(10.dp)
+                    ) {
+                        Icon(
+                            imageVector = if (isAmlCleared) Icons.Default.VerifiedUser else Icons.Default.Security,
+                            contentDescription = null,
+                            tint = if (isAmlCleared) ColorGreen else ColorGold,
+                            modifier = Modifier.size(20.dp)
+                        )
+                        Column {
+                            Text(
+                                text = if (isAmlCleared) "AML Tier-2 Verified (> ₹10,000)" else "AML / KYC Compliance (> ₹10,000)",
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = if (isAmlCleared) ColorGreen else ColorGold
+                            )
+                            Text(
+                                text = if (isAmlCleared)
+                                    "Verified PAN & Aadhaar details cleared for unlimited high-value payouts."
+                                else
+                                    "Anti-Money Laundering (PMLA) policy requires Tier-2 KYC for withdrawals over ₹10,000.",
+                                fontSize = 10.sp,
+                                color = TextSecondary,
+                                lineHeight = 13.sp
+                            )
+                        }
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
+
             val isValidAmount = enteredAmount >= 100.0 && enteredAmount <= winningsBalance
 
             Button(
@@ -527,7 +842,10 @@ fun WithdrawView(
 }
 
 @Composable
-fun TransactionsView(transactions: List<TransactionRecord>) {
+fun TransactionsView(
+    transactions: List<TransactionRecord>,
+    onSelectTransaction: (TransactionRecord) -> Unit = {}
+) {
     var selectedCategory by remember { mutableStateOf("ALL") }
 
     val filteredList = when (selectedCategory) {
@@ -592,7 +910,7 @@ fun TransactionsView(transactions: List<TransactionRecord>) {
             } else {
                 Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     filteredList.take(25).forEach { tx ->
-                        TransactionRowItem(tx = tx)
+                        TransactionRowItem(tx = tx, onClick = { onSelectTransaction(tx) })
                     }
                 }
             }
@@ -601,7 +919,10 @@ fun TransactionsView(transactions: List<TransactionRecord>) {
 }
 
 @Composable
-fun TransactionRowItem(tx: TransactionRecord) {
+fun TransactionRowItem(
+    tx: TransactionRecord,
+    onClick: () -> Unit = {}
+) {
     val timeFormat = SimpleDateFormat("MMM dd, HH:mm", Locale.getDefault())
     val isCredit = tx.amount >= 0
 
@@ -612,7 +933,9 @@ fun TransactionRowItem(tx: TransactionRecord) {
             .fillMaxWidth()
             .clip(RoundedCornerShape(8.dp))
             .background(SurfaceElevated)
+            .clickable(onClick = onClick)
             .padding(horizontal = 10.dp, vertical = 8.dp)
+            .testTag("txn_row_${tx.id}")
     ) {
         Row(
             verticalAlignment = Alignment.CenterVertically,
@@ -641,11 +964,17 @@ fun TransactionRowItem(tx: TransactionRecord) {
                     fontWeight = FontWeight.SemiBold,
                     color = TextPrimary
                 )
-                Text(
-                    text = timeFormat.format(Date(tx.timestamp)),
-                    fontSize = 9.sp,
-                    color = TextTertiary
-                )
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Text(
+                        text = timeFormat.format(Date(tx.timestamp)),
+                        fontSize = 9.sp,
+                        color = TextTertiary
+                    )
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(2.dp)) {
+                        Icon(Icons.Default.Lock, contentDescription = "Encrypted", tint = ColorGreen, modifier = Modifier.size(10.dp))
+                        Text(text = "JWT Signed", fontSize = 8.sp, color = ColorGreen, fontWeight = FontWeight.Bold)
+                    }
+                }
             }
         }
 

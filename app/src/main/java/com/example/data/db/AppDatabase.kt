@@ -21,7 +21,7 @@ import com.example.data.model.WalletAccount
         UserBet::class,
         TransactionRecord::class
     ],
-    version = 4,
+    version = 7,
     exportSchema = false
 )
 @TypeConverters(Converters::class)

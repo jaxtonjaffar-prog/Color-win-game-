@@ -66,6 +66,8 @@ fun HomeScreen(
     var showRulesDialog by remember { mutableStateOf(false) }
     var showAuthDialog by remember { mutableStateOf(false) }
     var showAdminDialog by remember { mutableStateOf(false) }
+    var showVipClubDialog by remember { mutableStateOf(false) }
+    var showHouseEdgeDialog by remember { mutableStateOf(false) }
 
     val snackbarHostState = remember { SnackbarHostState() }
 
@@ -257,7 +259,9 @@ fun HomeScreen(
                         profile = profile,
                         transactions = allTransactions,
                         onDeposit = { method, amt -> viewModel.deposit(method, amt) },
-                        onWithdraw = { amt, method, dest -> viewModel.withdraw(amt, method, dest) }
+                        onWithdraw = { amt, method, dest -> viewModel.withdraw(amt, method, dest) },
+                        onClaimCashback = { viewModel.claimVipCashback() },
+                        onTransferCommission = { amt -> viewModel.transferReferralCommission(amt) }
                     )
                 }
 
@@ -268,6 +272,8 @@ fun HomeScreen(
                         onSubmitKyc = { pan, aadhaar -> viewModel.submitKyc(pan, aadhaar) },
                         onLinkBank = { acc, ifsc, holder, upi -> viewModel.linkBank(acc, ifsc, holder, upi) },
                         onClaimVipBonus = { viewModel.claimDailyBonus() },
+                        onOpenVipClub = { showVipClubDialog = true },
+                        onOpenHouseEdge = { showHouseEdgeDialog = true },
                         onOpenAdmin = { showAdminDialog = true }
                     )
                 }
@@ -334,6 +340,23 @@ fun HomeScreen(
             onAdjustBalance = { m, b, w -> viewModel.adminSetBalance(m, b, w) },
             onToggleKyc = { viewModel.adminToggleKyc(it) },
             onDismiss = { showAdminDialog = false }
+        )
+    }
+
+    // VIP Club & Cashback Dialog (All 10 tiers, daily rewards, cashback rates)
+    if (showVipClubDialog) {
+        VipClubDialog(
+            profile = profile,
+            wallet = wallet,
+            onClaimCashback = { viewModel.claimVipCashback() },
+            onDismiss = { showVipClubDialog = false }
+        )
+    }
+
+    // House Edge & Payout Math Transparency Dialog
+    if (showHouseEdgeDialog) {
+        HouseEdgeInfoDialog(
+            onDismiss = { showHouseEdgeDialog = false }
         )
     }
 }

@@ -24,7 +24,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
+import com.example.data.model.ReferralSystem
 import com.example.data.model.UserProfile
+import com.example.data.model.VipSystem
 import com.example.ui.theme.*
 
 @Composable
@@ -34,6 +36,8 @@ fun ProfileScreen(
     onSubmitKyc: (pan: String, aadhaar: String) -> Unit,
     onLinkBank: (account: String, ifsc: String, holder: String, upi: String) -> Unit,
     onClaimVipBonus: () -> Unit,
+    onOpenVipClub: () -> Unit = {},
+    onOpenHouseEdge: () -> Unit = {},
     onOpenAdmin: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
@@ -166,7 +170,77 @@ fun ProfileScreen(
                             color = ColorGold,
                             trackColor = DividerColor
                         )
+
+                        Spacer(modifier = Modifier.height(12.dp))
+
+                        val vipTier = VipSystem.getTier(profile?.vipLevel ?: 1)
+                        OutlinedButton(
+                            onClick = onOpenVipClub,
+                            shape = RoundedCornerShape(10.dp),
+                            border = androidx.compose.foundation.BorderStroke(1.dp, ColorGold),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .testTag("view_vip_tiers_button")
+                        ) {
+                            Icon(Icons.Default.WorkspacePremium, contentDescription = null, tint = ColorGold, modifier = Modifier.size(16.dp))
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(
+                                text = "VIP Club • ${vipTier.cashbackPercent}% Daily Loss Cashback • View All Tiers",
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = ColorGold
+                            )
+                        }
                     }
+                }
+            }
+        }
+
+        // House Edge & Payout Transparency Card
+        item {
+            Card(
+                colors = CardDefaults.cardColors(containerColor = SurfaceDark),
+                shape = RoundedCornerShape(16.dp),
+                border = androidx.compose.foundation.BorderStroke(1.dp, ColorGold.copy(alpha = 0.35f)),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { onOpenHouseEdge() }
+                    .testTag("house_edge_banner_card")
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    modifier = Modifier.padding(14.dp)
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(10.dp),
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Box(
+                            contentAlignment = Alignment.Center,
+                            modifier = Modifier
+                                .size(36.dp)
+                                .clip(CircleShape)
+                                .background(ColorGold.copy(alpha = 0.2f))
+                        ) {
+                            Icon(Icons.Default.Percent, contentDescription = null, tint = ColorGold, modifier = Modifier.size(20.dp))
+                        }
+                        Column {
+                            Text(
+                                text = "House Edge via Payouts (10% Edge)",
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = TextPrimary
+                            )
+                            Text(
+                                text = "2.0x payout on 45% probability = 90% RTP (Provably Fair)",
+                                fontSize = 10.sp,
+                                color = ColorGoldLight
+                            )
+                        }
+                    }
+                    Icon(Icons.Default.ChevronRight, contentDescription = null, tint = ColorGold)
                 }
             }
         }
@@ -426,6 +500,50 @@ fun ProfileScreen(
                                 Spacer(modifier = Modifier.width(4.dp))
                                 Text(text = if (copiedNotice) "Copied!" else "Copy", fontSize = 11.sp, fontWeight = FontWeight.Bold)
                             }
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(10.dp))
+
+                    val activeCommRate = ReferralSystem.getCommissionRate(profile?.referralsCount ?: 0, profile?.vipLevel ?: 1)
+                    Surface(
+                        color = SurfaceElevated,
+                        shape = RoundedCornerShape(10.dp),
+                        border = androidx.compose.foundation.BorderStroke(1.dp, ColorViolet.copy(alpha = 0.35f)),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Column(modifier = Modifier.padding(12.dp)) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Text(
+                                    text = "Commission Rate (5% - 10%)",
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = ColorViolet
+                                )
+                                Surface(
+                                    color = ColorViolet.copy(alpha = 0.2f),
+                                    shape = RoundedCornerShape(4.dp)
+                                ) {
+                                    Text(
+                                        text = "${activeCommRate}% Active",
+                                        fontSize = 10.sp,
+                                        fontWeight = FontWeight.Black,
+                                        color = ColorViolet,
+                                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                    )
+                                }
+                            }
+                            Spacer(modifier = Modifier.height(6.dp))
+                            Text(
+                                text = "• Direct Referrals: 5% base rate up to 10% (scaled by VIP level & referrals)\n• Level 2 Sub-Affiliates: 2.5% secondary commission on sub-network wagers\n• Auto-credited to Referral Wallet with instant balance transfer",
+                                fontSize = 10.sp,
+                                color = TextSecondary,
+                                lineHeight = 14.sp
+                            )
                         }
                     }
                 }

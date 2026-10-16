@@ -26,6 +26,7 @@ data class DrawCelebration(
     val hadBets: Boolean
 )
 
+@OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
 class GameViewModel(application: Application) : AndroidViewModel(application) {
 
     private val repository: GameRepository
@@ -69,6 +70,13 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
 
     private val _verificationResult = MutableStateFlow<VerificationResult?>(null)
     val verificationResult: StateFlow<VerificationResult?> = _verificationResult.asStateFlow()
+
+    private val _selectedEncryptedTxn = MutableStateFlow<TransactionRecord?>(null)
+    val selectedEncryptedTxn: StateFlow<TransactionRecord?> = _selectedEncryptedTxn.asStateFlow()
+
+    fun selectEncryptedTxn(txn: TransactionRecord?) {
+        _selectedEncryptedTxn.value = txn
+    }
 
     val wallet: StateFlow<WalletAccount?>
     val userProfile: StateFlow<UserProfile?>
@@ -373,6 +381,66 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    fun submitAmlKyc(pan: String, aadhaar: String) {
+        viewModelScope.launch {
+            val res = repository.submitAmlKyc(pan, aadhaar)
+            res.onSuccess {
+                vibrateSuccess()
+                _messageSnackbar.emit("AML Tier-2 KYC Cleared: Verified PAN & Aadhaar! High-value payouts (> ₹10,000) unlocked.")
+            }.onFailure {
+                _messageSnackbar.emit(it.message ?: "AML verification failed")
+            }
+        }
+    }
+
+    fun setGeoLocation(state: String) {
+        viewModelScope.launch {
+            val res = repository.setGeoLocation(state)
+            res.onSuccess {
+                if (it.isGeoBlocked) {
+                    _messageSnackbar.emit("Geo-Compliance Alert: $state is legally restricted for online gambling. Wagering disabled.")
+                } else {
+                    vibrateSuccess()
+                    _messageSnackbar.emit("Geo-Location updated: $state (Compliant jurisdiction)")
+                }
+            }
+        }
+    }
+
+    fun verifyAge(dob: String) {
+        viewModelScope.launch {
+            val res = repository.verifyAge(dob)
+            res.onSuccess {
+                vibrateSuccess()
+                _messageSnackbar.emit("Age Verified (18+): Date of Birth verified successfully.")
+            }.onFailure {
+                _messageSnackbar.emit(it.message ?: "Age verification failed")
+            }
+        }
+    }
+
+    fun updateResponsibleLimits(depositLimit: Double, singleBetLimit: Double, dailyLossLimit: Double, sessionMins: Int) {
+        viewModelScope.launch {
+            val res = repository.updateResponsibleLimits(depositLimit, singleBetLimit, dailyLossLimit, sessionMins)
+            res.onSuccess {
+                vibrateSuccess()
+                _messageSnackbar.emit("Responsible Gaming Limits updated successfully!")
+            }
+        }
+    }
+
+    fun applySelfExclusion(durationHours: Int) {
+        viewModelScope.launch {
+            val res = repository.applySelfExclusion(durationHours)
+            res.onSuccess {
+                vibrateSuccess()
+                val days = durationHours / 24
+                val timeLabel = if (days >= 1) "$days day(s)" else "$durationHours hour(s)"
+                _messageSnackbar.emit("Self-Exclusion Activated: Wagering paused for $timeLabel.")
+            }
+        }
+    }
+
     fun linkBank(account: String, ifsc: String, holder: String, upi: String) {
         viewModelScope.launch {
             repository.linkBankDetails(account, ifsc, holder, upi)
@@ -386,7 +454,13 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
             val res = repository.deposit(method, amount)
             res.onSuccess {
                 vibrateSuccess()
-                _messageSnackbar.emit("₹${amount.toInt()} deposited via $method! Balance updated.")
+                val profile = userProfile.value
+                val bonus = com.example.data.model.DepositBonusSystem.calculateBonus(amount, profile?.isFirstDepositMade != true)
+                if (bonus > 0.0) {
+                    _messageSnackbar.emit("₹${amount.toInt()} deposited! +₹${bonus.toInt()} Deposit Bonus credited to wallet!")
+                } else {
+                    _messageSnackbar.emit("₹${amount.toInt()} deposited via $method! Balance updated.")
+                }
             }
         }
     }
@@ -396,19 +470,45 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
             val res = repository.withdraw(amount, method, destination)
             res.onSuccess {
                 vibrateSuccess()
-                _messageSnackbar.emit("Withdrawal request of ₹${amount.toInt()} placed! Processing within 24h.")
+                _messageSnackbar.emit("Withdrawal request for ₹${amount.toInt()} submitted to $destination ($method)!")
             }.onFailure {
-                _messageSnackbar.emit(it.message ?: "Withdrawal failed")
+                _messageSnackbar.emit(it.message ?: "Failed to process withdrawal")
+            }
+        }
+    }
+
+    fun claimVipCashback() {
+        viewModelScope.launch {
+            val res = repository.claimVipCashback()
+            res.onSuccess { amount ->
+                vibrateSuccess()
+                _messageSnackbar.emit("Claimed ₹${"%,.2f".format(amount)} VIP Loss Cashback to your balance!")
+            }.onFailure {
+                _messageSnackbar.emit(it.message ?: "Failed to claim cashback")
+            }
+        }
+    }
+
+    fun transferReferralCommission(amount: Double) {
+        viewModelScope.launch {
+            val res = repository.transferReferralCommission(amount)
+            res.onSuccess {
+                vibrateSuccess()
+                _messageSnackbar.emit("Transferred ₹${amount.toInt()} referral commission to playable Main Balance!")
+            }.onFailure {
+                _messageSnackbar.emit(it.message ?: "Failed to transfer commission")
             }
         }
     }
 
     fun claimDailyBonus() {
         viewModelScope.launch {
-            val success = repository.claimDailyBonus(500.0)
+            val profile = userProfile.value
+            val tier = if (profile != null) com.example.data.model.VipSystem.getTier(profile.vipLevel) else com.example.data.model.VipSystem.TIERS.first()
+            val success = repository.claimDailyBonus(tier.dailyReward)
             if (success) {
                 vibrateSuccess()
-                _messageSnackbar.emit("Claimed ₹500 Daily VIP Bonus!")
+                _messageSnackbar.emit("Claimed ₹${tier.dailyReward.toInt()} Daily VIP ${tier.level} Bonus!")
             } else {
                 _messageSnackbar.emit("Daily bonus already claimed today. Come back tomorrow!")
             }

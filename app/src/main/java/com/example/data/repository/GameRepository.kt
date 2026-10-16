@@ -2,10 +2,7 @@ package com.example.data.repository
 
 import com.example.data.db.GameDao
 import com.example.data.model.*
-import com.example.data.security.RateLimitResult
-import com.example.data.security.RoundCommitment
-import com.example.data.security.ServerRngEngine
-import com.example.data.security.UserRateLimiter
+import com.example.data.security.*
 import kotlinx.coroutines.flow.Flow
 import java.util.concurrent.ConcurrentHashMap
 import kotlin.random.Random
@@ -219,6 +216,22 @@ class GameRepository(private val dao: GameDao) {
             return Result.failure(Exception("Account is frozen by Admin. Contact customer support."))
         }
 
+        // 1. Age Verification (18+)
+        if (!profile.isAgeVerified) {
+            return Result.failure(Exception("Age Verification (18+) required before placing wagers. Please verify your age in Profile."))
+        }
+
+        // 2. Geo-Blocking Compliance
+        if (profile.isGeoBlocked) {
+            return Result.failure(Exception("Geo-Blocking Compliance: Wagering is restricted in ${profile.stateLocation} under state gambling regulations."))
+        }
+
+        // 3. Responsible Gambling Limits
+        val limitCheck = ResponsibleGamblingEngine.checkBet(chipAmount * multiplier, profile)
+        if (limitCheck is ResponsibleLimitResult.Blocked) {
+            return Result.failure(Exception("${limitCheck.title}: ${limitCheck.reason}"))
+        }
+
         // Anti-Cheat: Rate limiting per user (throttling rapid-fire bets/bots)
         val rateLimitResult = rateLimiter.checkBettingAllowed(profile.userId)
         if (rateLimitResult is RateLimitResult.Throttled) {
@@ -277,12 +290,19 @@ class GameRepository(private val dao: GameDao) {
         )
         val betId = dao.insertBet(bet)
 
+        val now = System.currentTimeMillis()
+        val jwt = TransactionCryptoEngine.generateJwtToken(profile.userId, betId, "BET_PLACED", totalCost)
+        val hash = TransactionCryptoEngine.generateSha256Receipt(periodId, profile.userId, totalCost, now)
+
         dao.insertTransaction(
             TransactionRecord(
                 type = "BET_PLACED",
                 category = "BET",
                 amount = -totalCost,
-                description = "Bet on ${target.displayLabel} (Period $periodId)"
+                description = "Bet on ${target.displayLabel} (Period $periodId)",
+                jwtToken = jwt,
+                securityHash = hash,
+                isEncrypted = true
             )
         )
 
@@ -399,14 +419,22 @@ class GameRepository(private val dao: GameDao) {
             dao.updateBets(resolvedBets)
         }
 
-        // Credit winnings to Winnings Balance!
+        // Credit winnings to Winnings Balance & accumulate VIP cashback on losses
+        val profile = dao.getUserProfileSync()
+        val vipTier = if (profile != null) VipSystem.getTier(profile.vipLevel) else VipSystem.TIERS.first()
+        val cashbackAccrued = if (totalRoundLoss > 0.0) totalRoundLoss * (vipTier.cashbackPercent / 100.0) else 0.0
+        val refRate = if (profile != null) ReferralSystem.getCommissionRate(profile.referralsCount, profile.vipLevel) else 5.0
+        val commissionAccrued = if (totalRoundLoss > 0.0) (totalRoundLoss * 0.10) * (refRate / 100.0) else 0.0
+
         if (totalRoundWin > 0.0) {
             val wallet = dao.getWalletSync()
             if (wallet != null) {
                 val updatedWallet = wallet.copy(
                     winningsBalance = wallet.winningsBalance + totalRoundWin,
                     totalWon = wallet.totalWon + totalRoundWin,
-                    totalLost = wallet.totalLost + totalRoundLoss
+                    totalLost = wallet.totalLost + totalRoundLoss,
+                    unclaimedCashback = wallet.unclaimedCashback + cashbackAccrued,
+                    referralCommissionBalance = wallet.referralCommissionBalance + commissionAccrued
                 )
                 dao.updateWallet(updatedWallet)
             }
@@ -422,7 +450,9 @@ class GameRepository(private val dao: GameDao) {
             val wallet = dao.getWalletSync()
             if (wallet != null) {
                 val updatedWallet = wallet.copy(
-                    totalLost = wallet.totalLost + totalRoundLoss
+                    totalLost = wallet.totalLost + totalRoundLoss,
+                    unclaimedCashback = wallet.unclaimedCashback + cashbackAccrued,
+                    referralCommissionBalance = wallet.referralCommissionBalance + commissionAccrued
                 )
                 dao.updateWallet(updatedWallet)
             }
@@ -433,8 +463,42 @@ class GameRepository(private val dao: GameDao) {
 
     suspend fun deposit(method: String, amount: Double): Result<Double> {
         val wallet = dao.getWalletSync() ?: return Result.failure(Exception("Wallet not found"))
-        val updated = wallet.copy(mainBalance = wallet.mainBalance + amount)
+        val profile = dao.getUserProfileSync()
+
+        if (profile != null) {
+            if (!profile.isAgeVerified) {
+                return Result.failure(Exception("Age Verification (18+) required before depositing funds."))
+            }
+            if (profile.isGeoBlocked) {
+                return Result.failure(Exception("Geo-Blocking Compliance: Financial operations are restricted in ${profile.stateLocation} under state regulations."))
+            }
+            val limitCheck = ResponsibleGamblingEngine.checkDeposit(amount, profile)
+            if (limitCheck is ResponsibleLimitResult.Blocked) {
+                return Result.failure(Exception("${limitCheck.title}: ${limitCheck.reason}"))
+            }
+        }
+
+        val isFirst = profile?.isFirstDepositMade != true
+        val bonus = DepositBonusSystem.calculateBonus(amount, isFirst)
+
+        val updated = wallet.copy(
+            mainBalance = wallet.mainBalance + amount,
+            bonusBalance = wallet.bonusBalance + bonus
+        )
         dao.updateWallet(updated)
+
+        if (profile != null) {
+            dao.updateUserProfile(
+                profile.copy(
+                    isFirstDepositMade = true,
+                    currentDailyDeposit = profile.currentDailyDeposit + amount
+                )
+            )
+        }
+
+        val now = System.currentTimeMillis()
+        val jwt = TransactionCryptoEngine.generateJwtToken(profile?.userId ?: "CW_782910", now, "DEPOSIT", amount)
+        val hash = TransactionCryptoEngine.generateSha256Receipt("DEP_$now", profile?.userId ?: "CW_782910", amount, now)
 
         dao.insertTransaction(
             TransactionRecord(
@@ -442,10 +506,100 @@ class GameRepository(private val dao: GameDao) {
                 category = "DEPOSIT",
                 amount = amount,
                 description = "Deposit via $method (Ref #${Random.nextInt(100000, 999999)})",
-                status = "COMPLETED"
+                status = "COMPLETED",
+                jwtToken = jwt,
+                securityHash = hash,
+                isEncrypted = true
             )
         )
+
+        if (bonus > 0.0) {
+            val bonusJwt = TransactionCryptoEngine.generateJwtToken(profile?.userId ?: "CW_782910", now + 1, "DEPOSIT_BONUS", bonus)
+            dao.insertTransaction(
+                TransactionRecord(
+                    type = "DEPOSIT_BONUS",
+                    category = "BONUS",
+                    amount = bonus,
+                    description = if (isFirst) "First Deposit 100% Match Bonus" else "Tiered Deposit Bonus (+${((bonus / amount) * 100).toInt()}%)",
+                    status = "COMPLETED",
+                    jwtToken = bonusJwt,
+                    securityHash = hash,
+                    isEncrypted = true
+                )
+            )
+        }
+
         return Result.success(updated.totalBalance)
+    }
+
+    suspend fun claimVipCashback(): Result<Double> {
+        val wallet = dao.getWalletSync() ?: return Result.failure(Exception("Wallet not found"))
+        val profile = dao.getUserProfileSync() ?: return Result.failure(Exception("Profile not found"))
+
+        val amountToClaim = wallet.unclaimedCashback
+        if (amountToClaim < 1.0) {
+            return Result.failure(Exception("No cashback available to claim yet (Min ₹1). Place wagers to earn up to 12% loss cashback!"))
+        }
+
+        val updatedWallet = wallet.copy(
+            winningsBalance = wallet.winningsBalance + amountToClaim,
+            unclaimedCashback = 0.0,
+            lastCashbackClaimTimestamp = System.currentTimeMillis()
+        )
+        dao.updateWallet(updatedWallet)
+
+        val updatedProfile = profile.copy(
+            totalCashbackClaimed = profile.totalCashbackClaimed + amountToClaim
+        )
+        dao.updateUserProfile(updatedProfile)
+
+        val now = System.currentTimeMillis()
+        val jwt = TransactionCryptoEngine.generateJwtToken(profile.userId, now, "VIP_CASHBACK", amountToClaim)
+        val hash = TransactionCryptoEngine.generateSha256Receipt("CB_$now", profile.userId, amountToClaim, now)
+
+        dao.insertTransaction(
+            TransactionRecord(
+                type = "VIP_CASHBACK",
+                category = "WIN",
+                amount = amountToClaim,
+                description = "VIP ${profile.vipLevel} Daily Loss Cashback Claimed",
+                jwtToken = jwt,
+                securityHash = hash,
+                isEncrypted = true
+            )
+        )
+        return Result.success(amountToClaim)
+    }
+
+    suspend fun transferReferralCommission(amount: Double): Result<Double> {
+        val wallet = dao.getWalletSync() ?: return Result.failure(Exception("Wallet not found"))
+        if (wallet.referralCommissionBalance < amount) {
+            return Result.failure(Exception("Insufficient commission balance (Available: ₹${wallet.referralCommissionBalance.toInt()})"))
+        }
+
+        val updatedWallet = wallet.copy(
+            mainBalance = wallet.mainBalance + amount,
+            referralCommissionBalance = wallet.referralCommissionBalance - amount
+        )
+        dao.updateWallet(updatedWallet)
+
+        val now = System.currentTimeMillis()
+        val profile = dao.getUserProfileSync()
+        val jwt = TransactionCryptoEngine.generateJwtToken(profile?.userId ?: "CW_782910", now, "COMMISSION_TRANSFER", amount)
+        val hash = TransactionCryptoEngine.generateSha256Receipt("COMM_$now", profile?.userId ?: "CW_782910", amount, now)
+
+        dao.insertTransaction(
+            TransactionRecord(
+                type = "COMMISSION_TRANSFER",
+                category = "BONUS",
+                amount = amount,
+                description = "Referral Commission Transferred to Main Balance",
+                jwtToken = jwt,
+                securityHash = hash,
+                isEncrypted = true
+            )
+        )
+        return Result.success(amount)
     }
 
     suspend fun withdraw(amount: Double, method: String, destination: String): Result<Double> {
@@ -457,8 +611,13 @@ class GameRepository(private val dao: GameDao) {
         if (profile?.isLoggedIn != true) {
             return Result.failure(Exception("Please login to withdraw funds"))
         }
-        if (!profile.kycVerified) {
-            return Result.failure(Exception("KYC Verification required before withdrawing!"))
+
+        // 1. AML / KYC Compliance check (Mandatory Tier-2 AML for withdrawals > ₹10,000)
+        val amlCheck = AmlComplianceEngine.validateWithdrawal(amount, profile)
+        when (amlCheck) {
+            is AmlCheckResult.KycRequired -> return Result.failure(Exception(amlCheck.message))
+            is AmlCheckResult.AmlTier2Required -> return Result.failure(Exception(amlCheck.message))
+            is AmlCheckResult.Approved -> { /* Approved */ }
         }
 
         val wallet = dao.getWalletSync() ?: return Result.failure(Exception("Wallet not found"))
@@ -469,16 +628,89 @@ class GameRepository(private val dao: GameDao) {
         val updated = wallet.copy(winningsBalance = wallet.winningsBalance - amount)
         dao.updateWallet(updated)
 
+        val now = System.currentTimeMillis()
+        val jwt = TransactionCryptoEngine.generateJwtToken(profile.userId, now, "WITHDRAWAL", amount)
+        val hash = TransactionCryptoEngine.generateSha256Receipt("WD_$now", profile.userId, amount, now)
+
+        val amlNote = if (amount > AmlComplianceEngine.AML_THRESHOLD_INR) " [AML Tier-2 Verified]" else ""
+
         dao.insertTransaction(
             TransactionRecord(
                 type = "WITHDRAWAL",
                 category = "WITHDRAWAL",
                 amount = -amount,
-                description = "Withdrawal to $destination ($method) - Processing within 24h",
-                status = "PROCESSING"
+                description = "Withdrawal to $destination ($method)$amlNote - Processing within 24h",
+                status = "PROCESSING",
+                jwtToken = jwt,
+                securityHash = hash,
+                isEncrypted = true
             )
         )
         return Result.success(updated.winningsBalance)
+    }
+
+    suspend fun setGeoLocation(state: String): Result<UserProfile> {
+        val profile = dao.getUserProfileSync() ?: return Result.failure(Exception("Profile not found"))
+        val check = GeoComplianceEngine.checkCompliance(state)
+        val isBlocked = check is GeoCheckResult.Blocked
+        val updated = profile.copy(stateLocation = state, isGeoBlocked = isBlocked)
+        dao.updateUserProfile(updated)
+        return Result.success(updated)
+    }
+
+    suspend fun verifyAge(dob: String): Result<UserProfile> {
+        val check = AgeVerificationEngine.calculateAge(dob)
+        if (check is AgeCheckResult.Underage) {
+            return Result.failure(Exception(check.reason))
+        }
+        if (check is AgeCheckResult.InvalidFormat) {
+            return Result.failure(Exception(check.message))
+        }
+        val profile = dao.getUserProfileSync() ?: return Result.failure(Exception("Profile not found"))
+        val updated = profile.copy(isAgeVerified = true, dateOfBirth = dob)
+        dao.updateUserProfile(updated)
+        return Result.success(updated)
+    }
+
+    suspend fun updateResponsibleLimits(
+        depositLimit: Double,
+        singleBetLimit: Double,
+        dailyLossLimit: Double,
+        sessionMins: Int
+    ): Result<UserProfile> {
+        val profile = dao.getUserProfileSync() ?: return Result.failure(Exception("Profile not found"))
+        val updated = profile.copy(
+            dailyDepositLimit = depositLimit,
+            singleBetLimit = singleBetLimit,
+            dailyLossLimit = dailyLossLimit,
+            sessionTimeLimitMinutes = sessionMins
+        )
+        dao.updateUserProfile(updated)
+        return Result.success(updated)
+    }
+
+    suspend fun applySelfExclusion(durationHours: Int): Result<UserProfile> {
+        val profile = dao.getUserProfileSync() ?: return Result.failure(Exception("Profile not found"))
+        val until = System.currentTimeMillis() + (durationHours * 3600 * 1000L)
+        val updated = profile.copy(selfExclusionUntil = until)
+        dao.updateUserProfile(updated)
+        return Result.success(updated)
+    }
+
+    suspend fun submitAmlKyc(pan: String, aadhaar: String): Result<UserProfile> {
+        val panPattern = Regex("^[A-Z]{5}[0-9]{4}[A-Z]$")
+        if (!panPattern.matches(pan.trim().uppercase())) {
+            return Result.failure(Exception("Invalid PAN Card format (expected 10 characters e.g. ABCDE1234F)"))
+        }
+        val profile = dao.getUserProfileSync() ?: return Result.failure(Exception("Profile not found"))
+        val updated = profile.copy(
+            kycPan = pan.trim().uppercase(),
+            kycAadhaar = aadhaar.trim(),
+            kycVerified = true,
+            isAmlVerified = true
+        )
+        dao.updateUserProfile(updated)
+        return Result.success(updated)
     }
 
     suspend fun claimDailyBonus(bonusAmount: Double = 500.0): Boolean {

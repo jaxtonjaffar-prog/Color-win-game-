@@ -59,10 +59,13 @@ data class WalletAccount(
     val mainBalance: Double = 1200.0,
     val bonusBalance: Double = 500.0,
     val winningsBalance: Double = 300.0,
+    val unclaimedCashback: Double = 84.50,
+    val referralCommissionBalance: Double = 320.0,
     val totalWon: Double = 0.0,
     val totalLost: Double = 0.0,
     val totalBetsCount: Int = 0,
-    val lastDailyClaimTimestamp: Long = 0L
+    val lastDailyClaimTimestamp: Long = 0L,
+    val lastCashbackClaimTimestamp: Long = 0L
 ) {
     // Total combined usable balance
     val totalBalance: Double get() = mainBalance + bonusBalance + winningsBalance
@@ -82,6 +85,8 @@ data class UserProfile(
     val vipXp: Int = 450,
     val referralEarnings: Double = 1250.0,
     val referralsCount: Int = 8,
+    val totalCashbackClaimed: Double = 420.0,
+    val isFirstDepositMade: Boolean = true,
     val kycVerified: Boolean = true,
     val kycPan: String = "ABCDE1234F",
     val kycAadhaar: String = "XXXX-XXXX-9012",
@@ -89,7 +94,19 @@ data class UserProfile(
     val bankIfsc: String = "HDFC0001234",
     val bankHolderName: String = "VIP Player",
     val upiId: String = "player@oksbi",
-    val isFrozen: Boolean = false
+    val isFrozen: Boolean = false,
+    val isAgeVerified: Boolean = true,
+    val dateOfBirth: String = "1998-05-15",
+    val stateLocation: String = "Maharashtra",
+    val isGeoBlocked: Boolean = false,
+    val isAmlVerified: Boolean = true,
+    val dailyDepositLimit: Double = 25000.0,
+    val singleBetLimit: Double = 5000.0,
+    val dailyLossLimit: Double = 10000.0,
+    val currentDailyLoss: Double = 0.0,
+    val currentDailyDeposit: Double = 0.0,
+    val selfExclusionUntil: Long = 0L,
+    val sessionTimeLimitMinutes: Int = 45
 )
 
 @Entity(tableName = "game_settings")
@@ -158,7 +175,10 @@ data class TransactionRecord(
     val amount: Double,
     val description: String,
     val status: String = "COMPLETED", // COMPLETED, PENDING, PROCESSING, REJECTED
-    val timestamp: Long = System.currentTimeMillis()
+    val timestamp: Long = System.currentTimeMillis(),
+    val jwtToken: String = "",
+    val securityHash: String = "",
+    val isEncrypted: Boolean = true
 )
 
 object GameUtils {
